@@ -24,6 +24,12 @@
         <hr/>
         <button id="submit">Submit</button>
         <div id="results"></div>
+
+        <div id="story-results" class="hidden">
+            <hr/>
+            <h3>Story:</h3>
+            <p id="story-text-results"></p>
+        </div>
     </div>
 
     <script>
@@ -188,6 +194,10 @@
             const scoreEl = document.createElement("p");
             scoreEl.innerText = `Final Score: ${(correctCount / testData.questions.length * 100).toFixed(2)}%`;
             resultsDiv.appendChild(scoreEl);
+
+            // Show the story again
+            document.getElementById("story-text-results").innerText = testData.story;
+            document.getElementById("story-results").classList.remove("hidden");
         }
 
         fetchTest().then(startTest);

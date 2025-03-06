@@ -50,6 +50,8 @@
         let language = getParamValue('language');
         let topic = getParamValue('topic');
 
+        let apiUrl = "https://api.openai.com/v1/chat/completions";
+
         async function fetchTest() {
             const prompt = `make an ${language} reading comprehension test of roughly 400 words with 5 multiple choice questions; the topic of the story should be ${topic}. state the correct answer after all the questions. Return the story and the questions with correct answers in JSON format. do not provide explanatory text. do not wrap answer in markdown.
 

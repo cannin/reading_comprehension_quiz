@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Reading Comprehension Test</title>
+    <style>
+        #story { text-align: justify; }
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .hidden { display: none; }
+        .correct { color: green; }
+        .incorrect { color: red; }
+    </style>
+</head>
+<body>
+    <div id="loading">Loading test...</div>
+    <div id="story-container" class="hidden">
+        <p>Total Words: <span id="word-count"></span> | Reading Time Remaining: <span id="timer"></span> seconds</p>
+        <p id="story"></p>
+    </div>
+    <div id="questions-container" class="hidden">
+        <p>Answer Time Remaining: <span id="answer-timer"></span> seconds</p>
+        <div id="questions"></div>
+        <hr/>
+        <button id="submit">Submit</button>
+        <div id="results"></div>
+    </div>
+
+    <script>
+        function getParamValue(param) {
+            let value = getQueryParam(param);
+            if (value) {
+                localStorage.setItem(param, value);
+            } else {
+                value = localStorage.getItem(param);
+            }
+            if (!value) {
+                console.error(`ERROR: ${param} is not provided and not found in localStorage`);
+            }
+            return value;
+        }
+
+        function getQueryParam(param) {
+            const urlParams = new URLSearchParams(window.location.search);
+            return urlParams.get(param);
+        }
+
+        let apiKey = getParamValue('apikey');
+        let wpm = getParamValue('wpm');
+        let language = getParamValue('language');
+        let topic = getParamValue('topic');
+
+        async function fetchTest() {
+            const prompt = `make an ${language} reading comprehension test of roughly 400 words with 5 multiple choice questions; the topic of the story should be ${topic}. state the correct answer after all the questions. Return the story and the questions with correct answers in JSON format. do not provide explanatory text. do not wrap answer in markdown.
+
+            # Example of Output Format:
+            {
+                "story": "In a small village ...",
+                "questions": [
+                    {
+                    "question": "What is Clara's main occupation?",
+                    "options": [
+                        "A) Photographer",
+                        "B) Musician",
+                        "C) Artist",
+                        "D) Writer"
+                    ],
+                    "answer": "C"
+                    }
+                ]
+            }`;
+
+            const data = {
+                model: "gpt-4o-mini",
+                messages: [{ role: "user", content: prompt }]
+            };
+
+            const response = await fetch(apiUrl, {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    "Authorization": `Bearer ${apiKey}`
+                },
+                body: JSON.stringify(data)
+            });
+
+            const result = await response.json();
+            try {
+                return JSON.parse(result.choices[0].message.content);
+            } catch (error) {
+                console.error("ERROR: Failed to parse API response", error);
+                return null;
+            }
+        }
+
+        function startTest(testData) {
+            if (!testData || !testData.story || !testData.questions) {
+                document.getElementById("loading").innerText = "Failed to load test. Try again later.";
+                return;
+            }
+            document.getElementById("loading").classList.add("hidden");
+            document.getElementById("story").innerText = testData.story;
+            document.getElementById("story-container").classList.remove("hidden");
+
+            const words = testData.story.split(" ").length;
+            document.getElementById("word-count").innerText = words;
+
+            let timeLeft = Math.ceil(words / wpm * 60);
+            document.getElementById("timer").innerText = timeLeft;
+
+            const timerInterval = setInterval(() => {
+                timeLeft--;
+                document.getElementById("timer").innerText = timeLeft;
+                if (timeLeft <= 0) {
+                    clearInterval(timerInterval);
+                    showQuestions(testData);
+                }
+            }, 1000);
+        }
+
+        function showQuestions(testData) {
+            document.getElementById("story-container").classList.add("hidden");
+            document.getElementById("questions-container").classList.remove("hidden");
+            const questionsDiv = document.getElementById("questions");
+            questionsDiv.innerHTML = "";
+
+            let answerTimeLeft = testData.questions.length * 12;
+            document.getElementById("answer-timer").innerText = answerTimeLeft;
+            const answerTimerInterval = setInterval(() => {
+                answerTimeLeft--;
+                document.getElementById("answer-timer").innerText = answerTimeLeft;
+                if (answerTimeLeft <= 0) {
+                    clearInterval(answerTimerInterval);
+                    gradeTest(testData);
+                }
+            }, 1000);
+
+            testData.questions.forEach((q, index) => {
+                const questionEl = document.createElement("div");
+                questionEl.innerHTML = `<p>${q.question}</p>`;
+                q.options.forEach(option => {
+                    const input = document.createElement("input");
+                    input.type = "radio";
+                    input.name = `q${index}`;
+                    input.value = option;
+                    questionEl.appendChild(input);
+                    questionEl.appendChild(document.createTextNode(option));
+                    questionEl.appendChild(document.createElement("br"));
+                });
+                questionsDiv.appendChild(questionEl);
+            });
+
+            document.getElementById("submit").addEventListener("click", () => {
+                clearInterval(answerTimerInterval);
+                gradeTest(testData);
+            });
+        }
+
+        function gradeTest(testData) {
+            let correctCount = 0;
+            const resultsDiv = document.getElementById("results");
+            resultsDiv.innerHTML = "";
+
+            testData.questions.forEach((q, index) => {
+                const selected = document.querySelector(`input[name='q${index}']:checked`);
+                const selectedValue = selected ? selected.value.trim() : "";
+                const selectedLetter = selectedValue.split(")")[0].trim(); // Extracts only the letter
+                const correctAnswer = q.answer.trim();
+                const resultEl = document.createElement("p");
+                if (selected) {
+                    if (selectedLetter === correctAnswer) {
+                        resultEl.innerText = `Question ${index + 1}: Correct!`;
+                        resultEl.classList.add("correct");
+                        correctCount++;
+                    } else {
+                        resultEl.innerText = `Question ${index + 1}: Incorrect! Correct answer: ${correctAnswer}`;
+                        resultEl.classList.add("incorrect");
+                    }
+                } else {
+                    resultEl.innerText = `Question ${index + 1}: No answer selected! Correct answer: ${correctAnswer}`;
+                    resultEl.classList.add("incorrect");
+                }
+                resultsDiv.appendChild(resultEl);
+            });
+
+            const scoreEl = document.createElement("p");
+            scoreEl.innerText = `Final Score: ${(correctCount / testData.questions.length * 100).toFixed(2)}%`;
+            resultsDiv.appendChild(scoreEl);
+        }
+
+        fetchTest().then(startTest);
+    </script>
+</body>
+</html>
